@@ -9,6 +9,7 @@ stady = 0
 conn = None
 db_name = ''
 table_name = ''
+a = 10
 
 
 Json_in_SQL = telebot.types.InlineKeyboardButton('Json in SQL', callback_data='json_sql')
