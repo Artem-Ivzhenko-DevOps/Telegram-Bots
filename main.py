@@ -1,175 +1,228 @@
+import time
 import telebot
-import json
-import sqlite3
-import csv
+import re
+import pymysql
+import mysql_connecter as mc
 
-token = '1024091588:AAFYiRd5sm5z4Ol2aF1lxFqayR8o1XNxIo0'
+start_time = time.time()
+token='1024091588:AAFYiRd5sm5z4Ol2aF1lxFqayR8o1XNxIo0'
 bot = telebot.TeleBot(token)
-stady = 0
-conn = None
-db_name = ''
-table_name = ''
-a = 10
+serverip=" "
+login=" "
+password=" "
+DataBase=" "
+stady=0
+
+#Main=Menu===============================================================================================================
+ConnectToDBBut = telebot.types.InlineKeyboardButton('Connect to server', callback_data='connectdb')
+CreateUserBut = telebot.types.InlineKeyboardButton('Create user', callback_data='usercreate')
+MainButtons = telebot.types.InlineKeyboardMarkup()
+MainButtons.add(ConnectToDBBut)
+MainButtons.add(CreateUserBut)
+#Change=Menu=============================================================================================================
+DeleteBut = telebot.types.InlineKeyboardButton('Delete record from %s'%DataBase, callback_data='delete')
+InsertBut = telebot.types.InlineKeyboardButton('Insert into %s'%DataBase, callback_data='insert')
+ExitToMenuBut = telebot.types.InlineKeyboardButton('Back to Main Menu', callback_data='exit')
+ShangeBut = telebot.types.InlineKeyboardMarkup()
+ShangeBut.add(DeleteBut)
+ShangeBut.add(InsertBut)
+ShangeBut.add(ExitToMenuBut)
+#Root=Menu================================================================================================================
+test = telebot.types.InlineKeyboardButton('test', callback_data='test')
+close = telebot.types.InlineKeyboardButton('close', callback_data='close')
+sendcommand = telebot.types.InlineKeyboardButton('send command', callback_data='command')
+RootMenu = telebot.types.InlineKeyboardMarkup()
+RootMenu.add(test)
+RootMenu.add(close)
+RootMenu.add(sendcommand)
 
 
-Json_in_SQL = telebot.types.InlineKeyboardButton('Json in SQL', callback_data='json_sql')
-CSV_in_SQL = telebot.types.InlineKeyboardButton('CSV in SQL', callback_data='csv_sql')
-MainMenu = telebot.types.InlineKeyboardMarkup()
-MainMenu.add(Json_in_SQL)
-MainMenu.add(CSV_in_SQL)
+#BOT`S=FUNCTIONS===============================================================================================================================================================
+def TryToConnect():
+    try:
+        db = pymysql.connect(host=serverip,user=login,password=password,db=DataBase,charset='utf8mb4',cursorclass=pymysql.cursors.DictCursor)
+        cursor = db.cursor()
+        return db,cursor
+    except pymysql.err.IntegrityError as e:
+        bot.send_message(id,e.args[1])
 
 
-Json_in_Base = telebot.types.InlineKeyboardButton('Json in data base', callback_data='json_in_base')
-Json_in_Data = telebot.types.InlineKeyboardButton('Json in data for data base', callback_data='json_in_data')
-json_Menu = telebot.types.InlineKeyboardMarkup()
-json_Menu.add(Json_in_Base)
-json_Menu.add(Json_in_Data)
+def ConnectToMySQL(id):
+    db,cursor = TryToConnect()
+    try:
+        cursor.execute("show tables")
+        db.commit()
+        data = cursor.fetchall()
+        for i in data:
+            bot.send_message(id,str(i)[1:-1])
+    finally:
+        db.close()
+    bot.send_message(id, 'Edit Menu', reply_markup=ShangeBut)
 
 
-CSV_in_Base = telebot.types.InlineKeyboardButton('CSV in data base', callback_data='csv_in_base')
-CSV_in_Data = telebot.types.InlineKeyboardButton('CSV in data for data base', callback_data='csv_in_data')
-csv_Menu = telebot.types.InlineKeyboardMarkup()
-csv_Menu.add(CSV_in_Base)
-csv_Menu.add(CSV_in_Data)
+def delete_from_table(msg):
+    db,cursor = TryToConnect()
+    msgtext = msg.text.split(' ')
+    table,attribute = msgtext[0],msgtext[1]
+    sql = "delete from {0} where id={1}".format(table,attribute)
+    try:
+        cursor.execute(sql)
+        db.commit()
+    except pymysql.err.InternalError as e:
+       bot.send_message(msg.chat.id,e.args[1])
+    finally:
+        db.close()
+    bot.send_message(msg.chat.id, 'Edit Menu', reply_markup=ShangeBut)
+
+
+def insert_into_table(msg):
+    db,cursor=TryToConnect()
+    msgtext=msg.text.split(' ')
+    table=msgtext[0]
+    values=msgtext[1:-1]
+    sql="insert into {0} values({1})".format(table,values)
+    try:
+        with db.cursor() as cursor:
+            cursor.execute(sql)
+            db.commit()
+    except pymysql.err.InternalError as e:
+        if e.args[1].startswith("Access denied for"):
+            bot.send_message(msg.chat.id,e.args[1])
+    finally:
+        db.close()
+    bot.send_message(msg.chat.id, 'Edit Menu', reply_markup=ShangeBut)
+
+
+def ip_read(msg):
+    global serverip
+    global stady
+    stady += 1
+    ip_check = re.findall("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$", msg.text)
+    if (ip_check == []) & (msg.text != "localhost"):
+        bot.send_message(msg.chat.id,"Invalid IP - " + str(msg.text))
+    else:
+        serverip=msg.text
+        bot.send_message(msg.chat.id,'Input Data Base name')
+
+
+def dbname_read(msg):
+    global DataBase
+    global stady
+    stady+=1
+    DataBase=msg.text
+    bot.send_message(msg.chat.id,'Connecting...')
+    mc.connect_to_mysql(msg.chat.id)
+
+
+def login_read(msg):
+    global login
+    global stady
+    stady+=1
+    login=msg.text
+    bot.send_message(msg.chat.id,'Input password')
+
+
+def password_read(msg):
+    global password
+    global stady
+    stady+=1
+    password=msg.text
+    bot.send_message(msg.chat.id,'Main Menu', reply_markup=MainButtons)
+
+
+def root_password(msg):
+    if msg.text=='123456789':
+        bot.send_message(msg.chat.id,'Root Menu',reply_markup=RootMenu)
+
+
+def connectdb(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Input server`s ip")
+    return 1
+
+
+def usercreate(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Input login")
+    return 3
+
+
+def delete_but(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Input table name and id")
+    return 5
+
+
+def insert_but(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Input table name and values")
+    return 6
+
+
+def exit_to_menu(call):
+    bot.send_message(call.message.chat.id, 'Main Menu', reply_markup=MainButtons)
+    return 0
+
+
+def test_connect(call):
+    db,cursor=TryToConnect()
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Try to connect oscar@localhost 1234 telega")
+    try:
+        cursor.execute("show tables")
+        db.commit()
+        data = cursor.fetchall()
+        for i in data:
+            bot.send_message(id,str(i)[1:-1])
+    finally:
+        db.close()
+
+def close_bot(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Bot is stop now  --- %s seconds ---"%(time.time() - start_time))
+    bot.stop_polling()
+    bot.stop_bot()
+    exit()
+def Send_Command(call):
+    db,cursor=TryToConnect()
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Input sql command")
+    try:
+        cursor.execute(sql)
+    except pymysql.err.ProgrammingError as e:
+        if e.args[1].startswith("You have an error in your SQL syntax"):
+            bot.send_message(id,str(e.args[1]))
+    finally:
+        db.close()
+    #bot.send_message(chat_id=call.message.chat.id, 'Root Menu', reply_markup=RootMenu)
 
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
-    bot.send_message(message.chat.id, 'Menu', reply_markup=MainMenu)
+    bot.send_message(message.chat.id, 'Main Menu', reply_markup=MainButtons)
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     global stady
-    buttons = {
-        'json_sql':      json_in_sql_func,
-        'json_in_base':  json_in_base_return,
-        'json_in_data':  json_in_data_return,
-        'csv_sql':       csv_in_sql_func,
-        'csv_in_base':   csv_in_base_return,
-        'csv_in_data':   csv_in_data_return
-    }
     if call.message:
-        stady = buttons[call.data](call)
-
-
-def json_in_sql_func(call):
-    bot.edit_message_text(chat_id=call.message.chat.id,
-                          message_id=call.message.message_id,
-                          text='JSON menu',
-                          reply_markup=json_Menu)
-    return 1
-
-
-def csv_in_sql_func(call):
-    bot.edit_message_text(chat_id=call.message.chat.id,
-                          message_id=call.message.message_id,
-                          text='CSV menu',
-                          reply_markup=csv_Menu)
-    return 2
-
-
-def json_in_base_return(call):
-    print_send_file(call=call)
-    return 11
-
-
-def json_in_data_return(call):
-    print_send_file(call=call)
-    return 12
-
-
-def csv_in_base_return(call):
-    print_send_file(call=call)
-    return 21
-
-
-def csv_in_data_return(call):
-    print_send_file(call=call)
-    return 22
-
-
-def print_send_file(call):
-    bot.edit_message_text(chat_id=call.message.chat.id,
-                          message_id=call.message.message_id,
-                          text='Send File')
+        buttons={'connectdb':connectdb,
+                'usercreate':usercreate,
+                'delete':delete_but,
+                'insert':insert_but,
+                'exit':exit_to_menu,
+                'test':test_connect,
+                'close':close_bot,
+                'command':Send_Command}
+        stady=buttons[call.data](call)
 
 
 @bot.message_handler(content_types=['text'])
 def send_text(message):
     global stady
-    read_funcs = {
-    '110': num_file,
-    '210': csv_in_base_func
-    }
-    stady = read_funcs[str(stady)](message=message)
-
-
-def num_file():
-    conn.execute('CREATE TABLE "users" (id, first_name, last_name, birthday)')
-    return 100
-
-
-@bot.message_handler(content_types=['file'])
-def send_text(message):
-    global stady
-    read_funcs = {
-    '11': json_in_base_func,
-    '12': json_in_data_func,
-    '21': csv_in_base_func,
-    '22': csv_in_data_func
-    }
-    stady = read_funcs[str(stady)](message=message)
-
-
-def json_in_base_func(message):
-    global conn
-    conn = sqlite3.connect(str(message.chat.id))
-    data = json.load(message.file)
-    print(data)
-    return 110
-
-
-def json_in_data_func(message):
-    return 120
-
-
-def csv_in_base_func(message):
-    reader = download_csv(message=message)
-    return 210
-
-
-def csv_in_data_func(message):
-    global table_name
-    reader = download_csv(message=message)
-    sql = sql = "INSERT INTO %s (" % table_name
-    with open(message.id, 'w') as f:
-        for i in reader:
-            for item in i:
-                sql += "%s," % str(item)
-            break
-        sql[len(sql) - 1] = ')'
-        sql += ' values ('
-        sql_base = sql
-        for i in reader[1:]:
-            sql = sql_base
-            for item in i:
-                sql += "'%s', " % str(item)
-            sql[len(sql) - 1] = ')\n'
-            f.write(sql)
-    return 220
-
-
-def download_csv(message):
-    raw = message.document.file_id
-    path = raw+".csv"
-    file_info = bot.get_file(raw)
-    downloaded_file = bot.download_file(file_info.file_path)
-    with open(path, 'wb') as f:
-        f.write(downloaded_file)
-    with open(raw, 'r') as f:
-        reader = csv.reader(f)
-        return reader
-
+    if stady>=1:
+        functions={1:ip_read,2:dbname_read,3:login_read,4:password_read,5:delete_from_table,6:insert_into_table,7:root_password}
+        functions[stady](message)
+    if message.text.lower() == 'hello':
+        bot.send_message(message.chat.id,'Main Menu', reply_markup=MainButtons)
+    elif message.text.lower() == 'connecting':
+        bot.send_message(message.chat.id,'Connecting...')
+        ConnectToMySQL(message.chat.id)
+    elif message.text.lower() == 'root':
+        bot.send_message(message.chat.id,'Input password')
+        stady=7
 
 bot.polling()
